@@ -12,5 +12,9 @@ __all__ = [
     'CustomDataset', 'XMLDataset', 'CocoDataset', 'VOCDataset', 'GroupSampler',
     'DistributedGroupSampler', 'build_dataloader', 'to_tensor', 'random_scale',
     'show_ann', 'get_dataset', 'ConcatDataset', 'RepeatDataset',
-    'ExtraAugmentation'
+    'ExtraAugmentation',
 ]
+
+
+from fashion.data import FashionDataset
+__all__ += ['FashionDataset']
