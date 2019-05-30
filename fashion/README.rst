@@ -7,6 +7,6 @@ Prepare data::
 Train::
 
     CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=4 \
-        python tools/train.py fashion/configs/htc_r50_fpn_20e.py --validate \
+        python tools/train.py fashion/configs/htc_r50_fpn_20e.py \
         --work_dir _runs/example
 
