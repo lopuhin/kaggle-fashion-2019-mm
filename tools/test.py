@@ -116,6 +116,7 @@ def parse_args():
         default='none',
         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
+    parser.add_argument('--val', action='store_true')
     args = parser.parse_args()
     return args
 
@@ -131,7 +132,8 @@ def main():
     if cfg.get('cudnn_benchmark', False):
         torch.backends.cudnn.benchmark = True
     cfg.model.pretrained = None
-    cfg.data.test.test_mode = True
+    data_cfg = cfg.data.val if args.val else cfg.data.test
+    data_cfg.test_mode = True
 
     # init distributed env first, since logger depends on the dist info.
     if args.launcher == 'none':
@@ -142,7 +144,7 @@ def main():
 
     # build the dataloader
     # TODO: support multiple images per gpu (only minor changes are needed)
-    dataset = get_dataset(cfg.data.test)
+    dataset = get_dataset(data_cfg)
     data_loader = build_dataloader(
         dataset,
         imgs_per_gpu=1,
