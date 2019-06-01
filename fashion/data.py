@@ -13,8 +13,6 @@ from mmdet.datasets.custom import CustomDataset
 
 DATA_ROOT = Path(__file__).parent.parent / 'data'
 
-# FIXME probably no need for +1 -1 for category here
-
 
 class FashionDataset(CustomDataset):
     def get_ann_info(self, idx):
