@@ -13,6 +13,8 @@ def main():
     for i in range(3):
         del state['state_dict'][f'bbox_head.{i}.fc_cls.weight']
         del state['state_dict'][f'bbox_head.{i}.fc_cls.bias']
+        del state['state_dict'][f'mask_head.{i}.conv_logits.weight']
+        del state['state_dict'][f'mask_head.{i}.conv_logits.bias']
     state['meta']['iter'] = 0
     state['meta']['epoch'] = 0
     torch.save(state, args.target)
