@@ -9,7 +9,7 @@ def main():
     parser.add_argument('target')
     args = parser.parse_args()
 
-    state = torch.load(args.rouce, map_location='cpu')
+    state = torch.load(args.source, map_location='cpu')
     for i in range(3):
         del state['state_dict'][f'bbox_head.{i}.fc_cls.weight']
         del state['state_dict'][f'bbox_head.{i}.fc_cls.bias']
