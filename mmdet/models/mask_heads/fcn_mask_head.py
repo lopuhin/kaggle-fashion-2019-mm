@@ -160,6 +160,9 @@ class FCNMaskHead(nn.Module):
                 mask_pred_ = mask_pred[i, label, :, :]
             else:
                 mask_pred_ = mask_pred[i, 0, :, :]
+            cls_segms[label - 1].append(mask_pred_)
+            continue  # we prefer this format and code below is super slow
+
             im_mask = np.zeros((img_h, img_w), dtype=np.uint8)
 
             bbox_mask = mmcv.imresize(mask_pred_, (w, h))
