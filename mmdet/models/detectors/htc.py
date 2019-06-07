@@ -392,5 +392,6 @@ class HybridTaskCascade(CascadeRCNN):
 
         return results
 
-    def aug_test(self, img, img_meta, proposals=None, rescale=False):
-        raise NotImplementedError
+    def aug_test(self, imgs, img_metas, **kwargs):
+        return [self.simple_test(imgs[i], img_metas[i], **kwargs)
+                for i in range(len(imgs))]

@@ -23,10 +23,13 @@ def single_gpu_test(model, data_loader, show=False):
     for i, data in enumerate(data_loader):
         with torch.no_grad():
             result = model(return_loss=False, rescale=not show, **data)
-        img_meta, = data['img_meta']
-        [[img_meta]] = img_meta.data
-        img_meta = dict(img_meta, image_id=dataset.img_infos[i]['filename'])
-        results.append((img_meta, result))
+        if not isinstance(result, list):
+            assert len(result) == 2
+            result = [result]
+        for j, img_meta in enumerate(data['img_meta']):
+            [[img_meta]] = img_meta.data
+            img_meta = dict(img_meta, image_id=dataset.img_infos[i]['filename'])
+            results.append((img_meta, result[j]))
 
         if show:
             model.module.show_result(data, result, dataset.img_norm_cfg)
