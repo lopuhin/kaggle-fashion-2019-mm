@@ -29,7 +29,11 @@ def single_gpu_test(model, data_loader, show=False):
         for j, img_meta in enumerate(data['img_meta']):
             [[img_meta]] = img_meta.data
             img_meta = dict(img_meta, image_id=dataset.img_infos[i]['filename'])
-            results.append((img_meta, result[j]))
+            # copy to avoid a memory leak (hanging on extra memory)
+            boxes, masks = result[j]
+            boxes = [x.copy() for x in boxes]
+            masks = [[x.copy() for x in cls_masks] for cls_masks in masks]
+            results.append((img_meta, (boxes, masks)))
 
         if show:
             model.module.show_result(data, result, dataset.img_norm_cfg)
