@@ -3,6 +3,7 @@ from collections import defaultdict, deque
 import json
 import hashlib
 from pathlib import Path
+import random
 from typing import List, Tuple
 
 import json_log_plots
@@ -75,7 +76,7 @@ def main():
         image_root=DATA_ROOT / 'train',
         training=True,
         size=args.size,
-        debug=True,
+        debug=False,
     )
     valid_dataset = FashionDataset(
         df=df_valid,
@@ -264,7 +265,8 @@ class FashionDataset(Dataset):
     def __getitem__(self, idx):
         item = self.df.iloc[idx]
         image = self.load_crop(item)
-        # TODO flexible crop with small rotation if self.training
+        if self.training:
+            image = self.aug_crop(image)
         image = self.pad_crop(image)
         attrs_cls_idx = self.attrs_classes_idx.get(
             item.attributes, len(self.attrs_classes))
@@ -292,6 +294,20 @@ class FashionDataset(Dataset):
         paste_box = (new_w - w) // 2, (new_h - h) // 2
         new_image.paste(image, paste_box)
         return new_image
+
+    def aug_crop(self, image):
+        if random.random() > 0.2:
+            angle = random.uniform(-3, 3)
+            image = image.rotate(
+                angle, resample=Image.BILINEAR, fillcolor='white')
+        if random.random() > 0.2:
+            w, h = image.size
+            x0 = random.randint(0, int(w * 0.02))
+            x1 = w - random.randint(0, int(w * 0.02))
+            y0 = random.randint(0, int(h * 0.02))
+            y1 = h - random.randint(0, int(h * 0.02))
+            image = image.crop((x0, y0, x1, y1))
+        return image
 
     def load_crop(self, item):
         cached_path = (self.image_root / '_crop_cache' / 'v1' / (
