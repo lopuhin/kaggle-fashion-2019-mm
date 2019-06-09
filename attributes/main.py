@@ -36,6 +36,7 @@ def main():
     arg('--size', default=(224, 336),
         type=lambda x: tuple(map(int, x.split('x'))),
         help='width, height, e.g. 224x336')
+    arg('--action', choices=['train', 'valid', 'test'], default='train')
     args = parser.parse_args()
 
     run_path = Path(args.run_path)
@@ -50,14 +51,24 @@ def main():
     df = df[(df['attributes'] != '') &
             (df['category'].astype(int) < N_CATEGORIES)]
 
+    value_counts = df['attributes'].value_counts()
     attrs_classes = sorted(
-        (df['attributes'].value_counts() > args.min_cls_count).index.values)
+        value_counts[value_counts > args.min_cls_count].index.values)
+
+    model_path = run_path / 'model.pth'
+    if args.action == 'valid':
+        state = torch.load(model_path)
+        attrs_classes = state['attrs_classes']
+        model = Model(attrs_classes)
+        model.load_state_dict(state['state_dict'])
+    else:
+        model = Model(attrs_classes)
 
     valid_image_ids = folds[0]
     valid_index = df['ImageId'].isin(valid_image_ids)
     df_train, df_valid = df[~valid_index], df[valid_index]
     print(f'{len(df):,} items total, {len(df_train):,} in train, '
-          f'{len(df_valid):,} in valid')
+          f'{len(df_valid):,} in valid. {len(attrs_classes)} attrs classes')
     train_dataset = FashionDataset(
         df=df_train,
         attrs_classes=attrs_classes,
@@ -88,17 +99,18 @@ def main():
     )
 
     device = torch.device('cuda')
-    model = Model(attrs_classes)
-    model.to(device)
     optimizer = None
     step = 0
     log_step = 50
     running_losses = defaultdict(lambda: deque(maxlen=log_step))
 
-    def train_step(xy):
-        x, y = xy
+    def to_device(x, y):
         x = x.to(device)
         y = tuple(v.to(device) for v in y)
+        return x, y
+
+    def train_step(xy):
+        x, y = to_device(*xy)
         optimizer.zero_grad()
         y_pred = model(x)
         loss, loss_dict = get_loss(y_pred, y)
@@ -106,6 +118,44 @@ def main():
         optimizer.step()
         for k, v in loss_dict.items():
             running_losses[k].append(float(v.item()))
+
+    def run_validation():
+        model.eval()
+        metrics = defaultdict(list)
+        with torch.no_grad():
+            for xy in tqdm.tqdm(valid_loader, desc='validation'):
+                x, y = to_device(*xy)
+                y_pred = model(x)
+                _, loss_dict = get_loss(y_pred, y)
+                for k, v in loss_dict.items():
+                    metrics[f'valid_{k}'].append(float(v.item()))
+                _, pred_attrs_cls, pred_category = y_pred
+                _, true_attrs_cls, true_category = y
+                metrics['category_acc'].extend(
+                    v.item() for v in (
+                        pred_category.argmax(dim=1) == true_category))
+                metrics['attrs_cls_acc'].extend(
+                    v.item() for v in (
+                        pred_attrs_cls.argmax(dim=1) == true_attrs_cls))
+                other_cls = len(attrs_classes)
+                metrics['attrs_cls_nonother_ratio'].extend(
+                    pred.item() == true.item() for pred, true in zip(
+                        pred_attrs_cls.argmax(dim=1), true_attrs_cls)
+                    if pred.item() != other_cls)
+                metrics['attrs_cls_nonother_acc'].extend(
+                    v.item() for v in (
+                        pred_attrs_cls.argmax(dim=1) == other_cls))
+        model.train()
+        metrics = {k: np.mean(v) for k, v in metrics.items()}
+        return metrics
+
+    model.to(device)
+
+    if args.action == 'valid':
+        valid_metrics = run_validation()
+        for k, v in valid_metrics.items():
+            print(f'{k:<30} {v:.3f}')
+        return
 
     for epoch in tqdm.trange(args.epochs, desc='epochs'):
         if epoch == 0:
@@ -119,6 +169,13 @@ def main():
                 json_log_plots.write_event(
                     run_path, step=args.batch_size * step,
                     **{k: np.mean(v) for k, v in running_losses.items()})
+        torch.save({
+            'state_dict': model.state_dict(),
+            'attrs_classes': attrs_classes,
+        }, model_path)
+        valid_metrics = run_validation()
+        json_log_plots.write_event(
+            run_path, step=args.batch_size * step, **valid_metrics)
         # TODO validation
 
 
