@@ -41,7 +41,8 @@ def main():
     args = parser.parse_args()
 
     run_path = Path(args.run_path)
-    run_path.mkdir(exist_ok=True, parents=True)
+    if args.action == 'train':
+        run_path.mkdir(exist_ok=True, parents=True)
     folds = json.loads((DATA_ROOT / 'folds-518.json').read_text())
     df = pd.read_pickle(DATA_ROOT / 'train.pkl')
     all_image_ids = [image_id for fold in folds for image_id in fold]
@@ -132,6 +133,9 @@ def main():
                     metrics[f'valid_{k}'].append(float(v.item()))
                 _, pred_attrs_cls, pred_category = y_pred
                 _, true_attrs_cls, true_category = y
+                pred_attrs_cls = F.softmax(pred_attrs_cls, dim=1)
+                pred_attrs_cls_max, pred_attrs_cls_argmax = \
+                    pred_attrs_cls.max(dim=1)
                 metrics['category_acc'].extend(
                     v.item() for v in (
                         pred_category.argmax(dim=1) == true_category))
@@ -139,13 +143,18 @@ def main():
                     v.item() for v in (
                         pred_attrs_cls.argmax(dim=1) == true_attrs_cls))
                 other_cls = len(attrs_classes)
-                metrics['attrs_cls_nonother_acc'].extend(
-                    pred.item() == true.item() for pred, true in zip(
-                        pred_attrs_cls.argmax(dim=1), true_attrs_cls)
-                    if pred.item() != other_cls)
-                metrics['attrs_cls_nonother_ratio'].extend(
-                    v.item() for v in (
-                        pred_attrs_cls.argmax(dim=1) != other_cls))
+                for thr in [0, 0.3, 0.5, 0.6, 0.7]:
+                    postfix = f'_{thr:0.2f}' if thr else ''
+                    metrics[f'attrs_cls_nonother_acc{postfix}'].extend(
+                        pred.item() == true.item() for pred, p, true in zip(
+                            pred_attrs_cls_argmax, pred_attrs_cls_max,
+                            true_attrs_cls)
+                        if pred.item() != other_cls and p.item() >= thr)
+                    metrics[f'attrs_cls_nonother_ratio{postfix}'].extend(
+                        v.item() for v, p in zip(
+                            pred_attrs_cls_argmax != other_cls,
+                            pred_attrs_cls_max)
+                        if p.item() >= thr)
         model.train()
         metrics = {k: np.mean(v) if len(v) else 0 for k, v in metrics.items()}
         return metrics
@@ -210,7 +219,6 @@ class Model(nn.Module):
 class Head(nn.Module):
     def __init__(self, base_features, attrs_classes):
         super().__init__()
-        # TODO check if an extra fc layer would help
         self.fc_attrs = nn.Linear(base_features, N_ATTRIBUTES)
         self.fc_attrs_cls = nn.Linear(base_features, len(attrs_classes) + 1)
         self.fc_category = nn.Linear(base_features, N_CATEGORIES)
@@ -228,7 +236,7 @@ def get_loss(y_pred, y_true):
     loss_attrs = F.binary_cross_entropy_with_logits(pred_attrs, true_attrs)
     loss_attrs_cls = F.cross_entropy(pred_attrs_cls, true_attrs_cls)
     loss_category = F.cross_entropy(pred_category, true_category)
-    loss = loss_attrs + 2 * loss_attrs_cls + loss_category
+    loss = 4 * loss_attrs + loss_attrs_cls + loss_category
     return loss, {
         'loss': loss,
         'loss_attrs': loss_attrs,
