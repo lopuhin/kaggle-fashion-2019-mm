@@ -138,15 +138,15 @@ def main():
                     v.item() for v in (
                         pred_attrs_cls.argmax(dim=1) == true_attrs_cls))
                 other_cls = len(attrs_classes)
-                metrics['attrs_cls_nonother_ratio'].extend(
+                metrics['attrs_cls_nonother_acc'].extend(
                     pred.item() == true.item() for pred, true in zip(
                         pred_attrs_cls.argmax(dim=1), true_attrs_cls)
                     if pred.item() != other_cls)
-                metrics['attrs_cls_nonother_acc'].extend(
+                metrics['attrs_cls_nonother_ratio'].extend(
                     v.item() for v in (
-                        pred_attrs_cls.argmax(dim=1) == other_cls))
+                        pred_attrs_cls.argmax(dim=1) != other_cls))
         model.train()
-        metrics = {k: np.mean(v) for k, v in metrics.items()}
+        metrics = {k: np.mean(v) if len(v) else 0 for k, v in metrics.items()}
         return metrics
 
     model.to(device)
@@ -267,7 +267,7 @@ class FashionDataset(Dataset):
         # TODO flexible crop with small rotation if self.training
         image = self.pad_crop(image)
         attrs_cls_idx = self.attrs_classes_idx.get(
-            item.attributes, len(self.attrs_classes) + 1)
+            item.attributes, len(self.attrs_classes))
         attributes_ohe = torch.zeros(N_ATTRIBUTES)
         for attr_id in map(int, item.attributes.split('_')):
             attributes_ohe[attr_id] = 1
